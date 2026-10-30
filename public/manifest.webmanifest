@@ -1,0 +1,12 @@
+{
+  "name": "PDFwerk – PDF-Editor",
+  "short_name": "PDFwerk",
+  "description": "PDFs kommentieren, organisieren, unterschreiben und schwärzen – komplett im Browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#1f5fbf",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
+  "file_handlers": [{ "action": "./", "accept": { "application/pdf": [".pdf"] } }]
+}
