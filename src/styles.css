@@ -114,14 +114,16 @@ a { color: var(--accent); }
 [hidden] { display: none !important; }
 
 /* ------------------------------------------------------------- shell layout */
+/* A column flexbox, not a grid: bars that are hidden (document tabs without documents, a
+   collapsed ribbon) must not shift the remaining rows. */
 .app {
-  display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   height: 100dvh;
 }
-.app > * { min-width: 0; }
+.app > * { min-width: 0; flex: none; }
+.app > .workspace { flex: 1 1 0; }
 
 .titlebar {
   display: flex;
