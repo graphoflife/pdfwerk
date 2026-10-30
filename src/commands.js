@@ -10,6 +10,9 @@ import { AnnotationWriter } from './core/pdf-write.js';
 /** Normalised key combo for a keyboard event, e.g. "Ctrl+Shift+S". */
 export function comboOf(e) {
   let key = e.key;
+  // Layout-independent digits and backquote for combos such as Ctrl+Shift+8 or Ctrl+`.
+  if ((e.ctrlKey || e.metaKey || e.altKey) && /^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  else if ((e.ctrlKey || e.metaKey) && e.code === 'Backquote') key = '`';
   if (key === ' ') key = 'Space';
   else if (key === '+' || key === '=' || (e.shiftKey && key === '*' && (e.ctrlKey || e.metaKey))) key = 'Plus';
   else if (key === '-' || key === '_') key = 'Minus';
@@ -81,7 +84,10 @@ export class Commands {
     this.add('exportImages', { label: 'Seiten als Bilder exportieren …', icon: 'FileImage', enabled: hasDoc, run: () => app.dialogs.exportImages() });
     this.add('properties', { label: 'Dokumenteigenschaften …', icon: 'Info', keys: ['Ctrl+D'], enabled: hasDoc, run: () => app.dialogs.docProperties() });
     this.add('close', { label: 'Dokument schließen', icon: 'X', keys: ['Alt+W'], enabled: hasDoc, run: () => app.closeTab(app.active) });
-    this.add('settings', { label: 'Einstellungen …', icon: 'Settings', run: () => app.dialogs.settings() });
+    this.add('closeAll', { label: 'Alle schließen', icon: 'X', enabled: hasDoc, run: () => app.closeAll() });
+    this.add('fileMenu', { label: 'Datei-Menü', icon: 'FolderOpen', keys: ['Alt+F'], run: () => app.backstage.open() });
+    this.add('settings', { label: 'Einstellungen …', icon: 'Settings', keys: ['Ctrl+K'], run: () => app.dialogs.settings() });
+    this.add('quickLaunch', { label: 'Schnellstart', icon: 'Search', keys: ['Ctrl+.'], run: () => app.quickLaunch.focus() });
     this.add('shortcuts', { label: 'Tastenkürzel', icon: 'Keyboard', keys: ['F1', '?'], run: () => app.dialogs.shortcuts() });
     this.add('about', { label: 'Über PDFwerk', icon: 'CircleHelp', run: () => app.dialogs.about() });
 
@@ -102,7 +108,13 @@ export class Commands {
     this.add('editAnnot', { label: 'Kommentar bearbeiten', icon: 'Pencil', keys: ['Enter', 'F2'], enabled: () => app.view?.selection.size === 1, run: () => { const id = [...app.view.selection][0]; const f = app.doc.find(id); app.editAnnotation(app.view, app.view.pageViews[f.page], id); } });
     this.add('flattenAnnots', { label: 'Anmerkungen abflachen', icon: 'Layers', enabled: editable, run: () => this.flattenAll() });
     this.add('deleteAllAnnots', { label: 'Alle Anmerkungen löschen', icon: 'Trash2', enabled: editable, run: () => this.deleteAll() });
-    this.add('toggleAnnots', { label: 'Anmerkungen ausblenden', icon: 'EyeOff', enabled: hasDoc, checked: () => !!app.view?.hiddenTypes, run: () => { const v = app.view; v.hiddenTypes = v.hiddenTypes ? null : new Set(['*']); v.pageViews.forEach((p) => p.visible ? p.renderAnnotations() : (p.layersStale = true)); } });
+    const setAnnotsHidden = (hide) => {
+      const v = app.view;
+      v.hiddenTypes = hide ? new Set(['*']) : null;
+      v.pageViews.forEach((p) => (p.visible ? p.renderAnnotations() : (p.layersStale = true)));
+    };
+    this.add('toggleAnnots', { label: 'Anmerkungen ausblenden', icon: 'EyeOff', keys: ['Ctrl+Shift+8'], enabled: hasDoc, checked: () => !!app.view?.hiddenTypes, run: () => setAnnotsHidden(!app.view.hiddenTypes) });
+    this.add('showAnnots', { label: 'Alle Anmerkungen anzeigen', icon: 'Eye', keys: ['Ctrl+8'], enabled: hasDoc, run: () => setAnnotsHidden(false) });
     this.add('stickyTools', { label: 'Werkzeug beibehalten', icon: 'Pin', checked: () => app.tools.sticky, run: () => app.tools.setSticky(!app.tools.sticky) });
     this.add('copyFormat', { label: 'Stil als Werkzeug-Standard', icon: 'Paintbrush', enabled: () => app.view?.selection.size === 1, run: () => this.styleAsDefault() });
     this.add('markHighlight', { label: 'Auswahl hervorheben', icon: 'Highlighter', enabled: editable, run: () => markupFromSelection(app, app.view, 'highlight') });
@@ -124,17 +136,22 @@ export class Commands {
     this.add('layoutTwo', { label: 'Doppelseite', icon: 'Columns2', keys: ['Ctrl+6'], enabled: hasDoc, checked: () => app.view?.layout === 'two', run: () => app.view.setLayout('two') });
     this.add('firstPage', { label: 'Erste Seite', icon: 'ChevronsLeft', keys: ['Home'], enabled: hasDoc, run: () => app.view.goToPage(0) });
     this.add('lastPage', { label: 'Letzte Seite', icon: 'ChevronsRight', keys: ['End'], enabled: hasDoc, run: () => app.view.goToPage(app.doc.numPages - 1) });
-    this.add('prevPage', { label: 'Vorherige Seite', icon: 'ChevronLeft', keys: ['Alt+ArrowLeft'], enabled: hasDoc, run: () => app.view.prev() });
-    this.add('nextPage', { label: 'Nächste Seite', icon: 'ChevronRight', keys: ['Alt+ArrowRight'], enabled: hasDoc, run: () => app.view.next() });
+    this.add('prevPage', { label: 'Vorherige Seite', icon: 'ChevronLeft', keys: ['Ctrl+ArrowLeft', 'Alt+ArrowLeft'], enabled: hasDoc, run: () => app.view.prev() });
+    this.add('nextPage', { label: 'Nächste Seite', icon: 'ChevronRight', keys: ['Ctrl+ArrowRight', 'Alt+ArrowRight'], enabled: hasDoc, run: () => app.view.next() });
     this.add('goToPage', { label: 'Gehe zu Seite …', icon: 'Hash', keys: ['Ctrl+G', 'Ctrl+Shift+N'], enabled: hasDoc, run: () => app.statusbar.focusPageInput() });
+    this.add('zoomTo', { label: 'Zoomen auf …', icon: 'ZoomIn', keys: ['Ctrl+Shift+M'], enabled: hasDoc, run: () => app.statusbar.focusZoom() });
     this.add('find', { label: 'Suchen …', icon: 'Search', keys: ['Ctrl+F'], enabled: hasDoc, run: () => app.findbar.open() });
     this.add('findNext', { label: 'Weitersuchen', icon: 'ChevronDown', keys: ['F3'], enabled: hasDoc, run: () => app.findbar.next(1) });
     this.add('findPrev', { label: 'Rückwärts suchen', icon: 'ChevronUp', keys: ['Shift+F3'], enabled: hasDoc, run: () => app.findbar.next(-1) });
     this.add('toggleLeft', { label: 'Seitenleiste links', icon: 'PanelLeft', keys: ['F4'], checked: () => !!app.left?.isOpen, run: () => app.left.toggle() });
-    this.add('toggleRight', { label: 'Eigenschaften-Leiste', icon: 'PanelRight', keys: ['Ctrl+E'], checked: () => !!app.props?.isOpen, run: () => app.props.toggle() });
-    this.add('panelThumbs', { label: 'Seitenminiaturen', icon: 'LayoutGrid', checked: () => !!app.left?.isOpen && app.left.panel === 'thumbs', run: () => app.left.show('thumbs', true) });
-    this.add('panelBookmarks', { label: 'Lesezeichen', icon: 'Bookmark', checked: () => !!app.left?.isOpen && app.left.panel === 'bookmarks', run: () => app.left.show('bookmarks', true) });
-    this.add('panelComments', { label: 'Kommentare', icon: 'MessagesSquare', checked: () => !!app.left?.isOpen && app.left.panel === 'comments', run: () => app.left.show('comments', true) });
+    this.add('toggleRight', { label: 'Eigenschaften-Leiste', icon: 'PanelRight', keys: ['Ctrl+E', 'Ctrl+`'], checked: () => !!app.props?.isOpen, run: () => app.props.toggle() });
+    const panel = (id) => ({
+      checked: () => !!app.left?.isOpen && app.left.panel === id,
+      run: () => (app.left.isOpen && app.left.panel === id ? app.left.toggle() : app.left.show(id, true)),
+    });
+    this.add('panelThumbs', { label: 'Seitenminiaturen', icon: 'LayoutGrid', keys: ['Ctrl+T'], ...panel('thumbs') });
+    this.add('panelBookmarks', { label: 'Lesezeichen', icon: 'Bookmark', keys: ['Ctrl+B'], ...panel('bookmarks') });
+    this.add('panelComments', { label: 'Kommentare', icon: 'MessagesSquare', keys: ['Ctrl+M'], ...panel('comments') });
     this.add('fullscreen', { label: 'Vollbild', icon: 'Fullscreen', keys: ['F11'], run: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()) });
     this.add('theme', { label: 'Dunkles Design', icon: 'Moon', checked: () => document.documentElement.dataset.theme === 'dark', run: () => app.toggleTheme() });
 
@@ -152,7 +169,7 @@ export class Commands {
     this.add('duplicatePages', { label: 'Seiten duplizieren', icon: 'Files', enabled: editable, run: () => busy('Seiten duplizieren', () => app.doc.duplicatePages(pages())) });
     this.add('movePages', { label: 'Seiten verschieben …', icon: 'ArrowUpDown', enabled: editable, run: () => app.dialogs.movePages() });
     this.add('reversePages', { label: 'Reihenfolge umkehren', icon: 'ArrowUpDown', enabled: editable, run: () => busy('Seiten umkehren', () => app.doc.reversePages(pages().length > 1 ? pages() : [...Array(app.doc.numPages).keys()])) });
-    this.add('cropPages', { label: 'Seiten zuschneiden …', icon: 'Crop', enabled: editable, run: () => app.dialogs.cropPages() });
+    this.add('cropPages', { label: 'Seiten zuschneiden …', icon: 'Crop', keys: ['Ctrl+Shift+T'], enabled: editable, run: () => app.dialogs.cropPages() });
     this.add('watermark', { label: 'Wasserzeichen …', icon: 'Droplet', enabled: editable, run: () => app.dialogs.watermark() });
     this.add('headerFooter', { label: 'Kopf-/Fußzeile & Seitenzahlen …', icon: 'Heading', enabled: editable, run: () => app.dialogs.headerFooter() });
     this.add('mergeFiles', { label: 'Dateien anhängen …', icon: 'Combine', enabled: editable, run: () => app.dialogs.insertFromFile({ atEnd: true, multiple: true }) });
@@ -162,8 +179,8 @@ export class Commands {
     this.add('sanitize', { label: 'Metadaten entfernen', icon: 'Ban', enabled: editable, run: () => this.sanitize() });
     this.add('resetForm', { label: 'Formular zurücksetzen', icon: 'RotateCcw', enabled: hasDoc, run: () => this.resetForm() });
     this.add('highlightFields', { label: 'Formularfelder hervorheben', icon: 'TextCursorInput', checked: () => !document.body.classList.contains('no-field-highlight'), run: () => { document.body.classList.toggle('no-field-highlight'); app.prefs.set('fieldHighlight', !document.body.classList.contains('no-field-highlight')); } });
-    this.add('scaleSettings', { label: 'Maßstab …', icon: 'Ruler', run: () => app.dialogs.measureScale() });
-    this.add('addBookmark', { label: 'Lesezeichen hinzufügen', icon: 'BookmarkPlus', keys: ['Ctrl+B'], enabled: editable, run: () => app.left.bookmarks.addForCurrent() });
+    this.add('scaleSettings', { label: 'Maßstab …', icon: 'Ruler', keys: ['Ctrl+Shift+C'], run: () => app.dialogs.measureScale() });
+    this.add('addBookmark', { label: 'Lesezeichen hinzufügen', icon: 'BookmarkPlus', keys: ['Ctrl+Shift+B'], enabled: editable, run: () => app.left.bookmarks.addForCurrent() });
   }
 
   async #history(dir) {

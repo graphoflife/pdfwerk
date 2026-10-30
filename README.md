@@ -11,6 +11,15 @@ als statische Seite auf **GitHub Pages** betreiben und funktioniert nach dem ers
 
 ## Funktionen
 
+**Vertraute Oberfläche** – aufgebaut wie klassische Desktop-PDF-Editoren, damit der Umstieg leichtfällt
+- Menüband mit den Reitern Datei, Start, Ansicht, Kommentar, Schützen, Formular, Organisieren,
+  Konvertieren, Lesezeichen, Hilfe – plus kontextbezogenem Reiter **Format** für Farbe, Linie,
+  Schrift und Anordnung der Auswahl bzw. des aktiven Werkzeugs
+- Datei-Bereich (Backstage) mit **zuletzt verwendeten Dateien** (Chrome/Edge), Neu, Exportieren
+- Schnellzugriff-Leiste, **Schnellstart**-Suche für alle Befehle (Strg+.), Dokument-Reiter,
+  Statusleiste mit Seitennavigation, Seitengröße, Zoomfeld und Zoom-Regler
+- Klassisches helles Design (Standard) oder dunkles Design
+
 **Ansehen & Navigieren**
 - Mehrere Dokumente in Tabs, Drag & Drop von Dateien
 - Zoom (Strg + Mausrad, Seitenbreite, ganze Seite, 100 %), Ansicht drehen
@@ -54,24 +63,36 @@ Unbegrenztes Rückgängig/Wiederholen gilt für Anmerkungen **und** Seitenoperat
 | **Alt** beim Aufziehen | Rechteck/Ellipse vom Mittelpunkt aus |
 | **Strg** + Ziehen | Anmerkung duplizieren |
 | **Leertaste** halten | vorübergehend Hand-Werkzeug |
-| H · V · S | Hand · Anmerkungen auswählen · Text auswählen |
+| H · V · S | Hand · Kommentare auswählen · Text auswählen |
 | T · B · K · N | Schreibmaschine · Textfeld · Legende · Notiz |
 | M · U · D · W | Hervorheben · Unterstreichen · Durchstreichen · Wellenlinie |
 | R · E · L · A · P · G · C · F · X | Rechteck · Ellipse · Linie · Pfeil · Polylinie · Polygon · Wolke · Freihand · Radierer |
 | J · I · Q | Stempel · Bild · Unterschrift |
+| Alt+F | Datei-Bereich |
+| Strg+. | Schnellstart (Befehl suchen) |
 | Strg+O / Strg+S / Strg+Shift+S / Strg+P | Öffnen / Speichern / Speichern unter / Drucken |
+| Strg+D / Strg+K | Dokumenteigenschaften / Einstellungen |
 | Strg+Z / Strg+Y | Rückgängig / Wiederholen |
 | Strg+C / X / V, Entf | Kopieren / Ausschneiden / Einfügen, Löschen |
 | Pfeiltasten (+Shift) | Auswahl um 1 pt (10 pt) verschieben |
-| Strg+0 / 1 / 2 | Ganze Seite / 100 % / Seitenbreite |
-| Strg+Plus / Minus | Zoomen |
+| Strg+0 / 1 / 2 | Ganze Seite / Originalgröße / Seitenbreite |
+| Strg+Plus / Minus, Strg+Shift+M | Zoomen, Zoomfeld |
 | Strg+Shift+Plus / Minus | Ansicht drehen |
-| Strg+F, F3 / Shift+F3 | Suchen, nächster/vorheriger Treffer |
+| Pos1 / Ende, Strg+← / → | Erste / letzte Seite, vorherige / nächste Seite |
 | Strg+G | Gehe zu Seite |
+| Strg+F, F3 / Shift+F3 | Suchen, nächster/vorheriger Treffer |
+| Strg+B / Strg+T / Strg+M | Bereich Lesezeichen / Miniaturen / Kommentare |
+| Strg+E oder Strg+` | Eigenschaften-Leiste |
+| Strg+8 / Strg+Shift+8 | Anmerkungen anzeigen / ausblenden |
 | Strg+Shift+R / L | Seiten rechts/links drehen |
-| Strg+Shift+D / I / E | Seiten löschen / einfügen / extrahieren |
-| Strg+B | Lesezeichen hinzufügen |
+| Strg+Shift+D / I / E / T | Seiten löschen / einfügen / extrahieren / zuschneiden |
+| Strg+Shift+B | Lesezeichen hinzufügen |
+| Strg+Shift+C | Maßstab für Messungen |
 | F1 | Alle Tastenkürzel anzeigen |
+
+Die Belegung folgt weitgehend den üblichen Desktop-PDF-Editoren. Einige Kürzel (z. B. Strg+T,
+Strg+W, Strg+N, Strg+Shift+N/T) reserviert der Browser selbst; dafür gibt es Alternativen
+(Strg+G, Alt+W, Alt+N) oder die Befehle im Menüband und im Schnellstart.
 
 ## Entwicklung
 
@@ -101,7 +122,7 @@ src/
   core/        Dokumentmodell, PDF lesen/schreiben (pdf-lib), Seitenoperationen, Geometrie, Schriften
   viewer/      Dokumentansicht, Seitendarstellung (pdf.js), SVG-Ebene für Anmerkungen, Suche
   tools/       Werkzeuge (Auswahl, Zeichnen, Text, Markieren, Stempel …) und Editoren
-  ui/          Menüband, Seitenleisten, Eigenschaften, Statusleiste, Dialoge
+  ui/          Menüband, Datei-Bereich, Schnellstart, Seitenleisten, Eigenschaften, Statusleiste, Dialoge
   commands.js  Alle Befehle und Tastenkürzel
   app.js       Anwendungsrahmen (Tabs, Zwischenablage, Drag & Drop, Design)
 ```
@@ -126,4 +147,4 @@ unveränderte Anmerkungen werden beim Speichern unverändert übernommen.
 [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT), [Lucide](https://lucide.dev) (ISC).
 
 PDFwerk ist ein unabhängiges Projekt und steht in keiner Verbindung zu Herstellern kommerzieller
-PDF-Editoren; genannte Produktnamen sind Marken ihrer jeweiligen Inhaber.
+PDF-Editoren; Logos, Symbole und Texte sind eigene bzw. stammen aus den genannten freien Bibliotheken.

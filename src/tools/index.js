@@ -35,7 +35,7 @@ export const DEFAULT_STYLES = {
 
 export const TOOL_DEFS = [
   { id: 'hand', label: 'Hand', icon: 'Hand', key: 'h', nav: true },
-  { id: 'select', label: 'Anmerkungen auswählen', icon: 'MousePointer2', key: 'v', nav: true },
+  { id: 'select', label: 'Kommentare auswählen', icon: 'MousePointer2', key: 'v', nav: true },
   { id: 'text', label: 'Text auswählen', icon: 'TextCursor', key: 's', nav: true },
   { id: 'typewriter', label: 'Schreibmaschine', icon: 'Type', key: 't', cls: FreeTextTool, variant: 'typewriter' },
   { id: 'textbox', label: 'Textfeld', icon: 'TextCursorInput', key: 'b', cls: FreeTextTool, variant: 'textbox' },

@@ -266,6 +266,43 @@ export function colorControl(value, onChange, { allowNone = false } = {}) {
   return wrap;
 }
 
+// The colour popup closes on outside clicks only (not on window blur, which the native
+// colour picker triggers).
+let colorPop = null;
+function closeColorPop() {
+  colorPop?.remove();
+  colorPop = null;
+}
+document.addEventListener('pointerdown', closeColorPop);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeColorPop(); });
+
+/** Compact colour picker: a swatch button that opens the palette in a popup. */
+export function colorButton(value, onChange, { allowNone = false, title = '' } = {}) {
+  let current = value;
+  const chip = h('span', { class: 'cbtn-chip' });
+  const paint = () => {
+    chip.style.background = current ? toHex(current) : '';
+    chip.classList.toggle('none', !current);
+  };
+  const btn = h('button', {
+    class: 'cbtn', type: 'button', title,
+    onpointerdown: (e) => e.stopPropagation(),
+    onclick: () => {
+      if (colorPop) { closeColorPop(); return; }
+      const pop = h('div', { class: 'menu color-pop', onpointerdown: (e) => e.stopPropagation() },
+        colorControl(current, (c) => { current = c; paint(); onChange(c); }, { allowNone }));
+      document.body.append(pop);
+      const r = btn.getBoundingClientRect();
+      const pr = pop.getBoundingClientRect();
+      pop.style.left = `${Math.max(4, Math.min(r.left, innerWidth - pr.width - 4))}px`;
+      pop.style.top = `${r.bottom + 2}px`;
+      colorPop = pop;
+    },
+  }, chip, icon('ChevronDown', 12));
+  paint();
+  return btn;
+}
+
 export function downloadBlob(data, filename, type = 'application/pdf') {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
   const url = URL.createObjectURL(blob);

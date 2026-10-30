@@ -12,6 +12,9 @@ import { LeftSidebar } from './ui/sidebar.js';
 import { PropertiesPanel } from './ui/properties.js';
 import { StatusBar, FindBar } from './ui/statusbar.js';
 import { Dialogs } from './ui/dialogs.js';
+import { Backstage, recentRow } from './ui/backstage.js';
+import { QuickLaunch } from './ui/quicklaunch.js';
+import { addRecent, listRecent, recentSupported } from './core/recent.js';
 import { h, iconButton, toast, withBusy, showMenu, closeMenus, openDialog, field, select } from './ui/dom.js';
 import { icon } from './ui/icons.js';
 import { pickFiles, saveBytes, hasFsAccess } from './core/file-io.js';
@@ -46,17 +49,24 @@ export class App {
 
   // ------------------------------------------------------------------ DOM
   #buildDom() {
-    const c = (id) => iconButton(this.commands.get(id).icon, `${t(this.commands.get(id).label)} (${this.commands.shortcut(id)})`, () => this.commands.run(id), { cls: `qa-btn qa-${id}`, size: 17 });
+    const c = (id) => iconButton(this.commands.get(id).icon, `${t(this.commands.get(id).label)} (${this.commands.shortcut(id)})`, () => this.commands.run(id), { cls: `qa-btn qa-${id}`, size: 16 });
     this.qa = h('div', { class: 'qa' }, c('open'), c('save'), c('print'), h('span', { class: 'qa-sep' }), c('undo'), c('redo'));
-    const tabsHost = h('nav', { class: 'ribbon-tabs', role: 'tablist' });
+    this.quickLaunch = new QuickLaunch(this);
+    this.titleEl = h('div', { class: 'app-title' });
     const right = h('div', { class: 'top-right' },
-      iconButton('Moon', t('Hell/Dunkel umschalten'), () => this.toggleTheme(), { cls: 'theme-btn', size: 17 }),
-      iconButton('Settings', t('Einstellungen'), () => this.commands.run('settings'), { size: 17 }),
-      iconButton('Keyboard', t('Tastenkürzel (F1)'), () => this.commands.run('shortcuts'), { size: 17 }));
-    const brand = h('div', { class: 'brand' }, h('span', { class: 'logo' }, icon('FileText', 18)), h('span', { text: 'PDFwerk' }));
-    const top = h('header', { class: 'topbar' }, brand, this.qa, tabsHost, right);
+      this.quickLaunch.el,
+      iconButton('Moon', t('Hell/Dunkel umschalten'), () => this.toggleTheme(), { cls: 'theme-btn', size: 16 }),
+      iconButton('Settings', `${t('Einstellungen')} (${this.commands.shortcut('settings')})`, () => this.commands.run('settings'), { size: 16 }),
+      iconButton('CircleHelp', t('Tastenkürzel (F1)'), () => this.commands.run('shortcuts'), { size: 16 }));
+    const brand = h('div', { class: 'brand', title: 'PDFwerk' }, h('span', { class: 'logo' }, icon('FileText', 14)));
+    const top = h('header', { class: 'titlebar' }, brand, this.qa, this.titleEl, right);
+    this.tabsHost = h('nav', { class: 'ribbon-tabs', role: 'tablist' });
     this.ribbonBody = h('div', { class: 'ribbon-body', role: 'toolbar' });
-    this.tabBar = h('div', { class: 'doc-tabs', role: 'tablist' });
+    this.tabList = h('div', { class: 'doc-tab-list' });
+    this.tabBar = h('div', { class: 'doc-tabs', role: 'tablist', hidden: true }, this.tabList,
+      iconButton('Plus', `${t('Öffnen …')} (${this.commands.shortcut('open')})`, () => this.commands.run('open'), { size: 15, cls: 'tab-new' }),
+      h('div', { class: 'doc-tabs-fill' }),
+      iconButton('X', t('Dokument schließen'), () => this.commands.run('close'), { size: 15, cls: 'tab-close-active' }));
     this.leftEl = h('aside', { class: 'left-sidebar' });
     this.rightEl = h('aside', { class: 'right-sidebar' });
     this.viewsEl = h('div', { class: 'views' });
@@ -64,16 +74,17 @@ export class App {
     this.viewerHost = h('section', { class: 'viewer-host' }, this.viewsEl, this.startEl);
     this.statusEl = h('footer', { class: 'statusbar' });
     this.dropOverlay = h('div', { class: 'drop-overlay' }, h('div', {}, icon('FileInput', 40), h('div', { text: t('Dateien hier ablegen') })));
+    this.backstage = new Backstage(this);
     this.root.replaceChildren(
-      top, this.ribbonBody, this.tabBar,
+      top, this.tabsHost, this.ribbonBody, this.tabBar,
       h('main', { class: 'workspace' }, this.leftEl, this.viewerHost, this.rightEl),
-      this.statusEl, this.dropOverlay);
-    this.ribbon = new Ribbon(this, tabsHost, this.ribbonBody);
+      this.statusEl, this.dropOverlay, this.backstage.el);
+    this.ribbon = new Ribbon(this, this.tabsHost, this.ribbonBody);
     this.left = new LeftSidebar(this, this.leftEl);
     this.props = new PropertiesPanel(this, this.rightEl);
     this.statusbar = new StatusBar(this, this.statusEl);
     this.findbar = new FindBar(this, this.viewerHost);
-    this.tools.addEventListener('style', () => this.props.refresh(true));
+    this.tools.addEventListener('style', () => { this.props.refresh(true); this.ribbon.refresh(); });
   }
 
   rebuildUI() {
@@ -81,7 +92,7 @@ export class App {
     this.#buildDom();
     for (const tab of this.tabs) {
       this.viewsEl.append(tab.view.el);
-      this.tabBar.append(tab.el);
+      this.tabList.append(tab.el);
     }
     this.#renderTabs();
     this.left.setDoc();
@@ -100,8 +111,18 @@ export class App {
         card('fromImages', 'Aus Bildern', 'Fotos/Scans zu PDF')),
       h('div', { class: 'start-tips' },
         h('div', {}, icon('Keyboard', 16), h('span', { text: t('F1: alle Tastenkürzel · Shift beim Zeichnen: 0°/45°/90° einrasten') })),
-        h('div', {}, icon('Lock', 16), h('span', { text: t('Läuft komplett lokal – kein Upload, kein Konto.') })))));
+        h('div', {}, icon('Lock', 16), h('span', { text: t('Läuft komplett lokal – kein Upload, kein Konto.') }))),
+      this.startRecent = h('div', { class: 'start-recent', hidden: true })));
     this.startEl.hidden = this.tabs.length > 0;
+    this.refreshStartRecent();
+  }
+
+  async refreshStartRecent() {
+    const box = this.startRecent;
+    if (!box || !recentSupported) return;
+    const entries = (await listRecent()).slice(0, 8);
+    box.hidden = !entries.length;
+    box.replaceChildren(h('h2', { text: t('Zuletzt verwendet') }), ...entries.map((e) => recentRow(this, e, null, () => this.refreshStartRecent())));
   }
 
   // ------------------------------------------------------------------ documents & tabs
@@ -128,6 +149,7 @@ export class App {
       return null;
     }
     const tab = this.#addTab(doc);
+    if (handle) addRecent(name, handle).then(() => this.refreshStartRecent());
     if (doc.readOnly) toast(t('Dieses PDF ist geschützt und wird schreibgeschützt geöffnet (Formulare können ausgefüllt werden).'), { timeout: 7000 });
     if (!this.prefs.get('authorHint') && !this.prefs.get('author')) {
       this.prefs.set('authorHint', true);
@@ -141,9 +163,9 @@ export class App {
     view.search = new SearchController(view);
     const tab = { doc, view };
     tab.el = h('div', { class: 'doc-tab', role: 'tab', title: doc.name, onclick: () => this.activate(tab), onauxclick: (e) => { if (e.button === 1) this.closeTab(tab); } },
-      icon('FileText', 14), h('span', { class: 'tab-name' }), iconButton('X', t('Schließen'), (e) => { e.stopPropagation(); this.closeTab(tab); }, { size: 14, cls: 'tab-close' }));
+      icon('FileText', 14), h('span', { class: 'tab-name' }), iconButton('X', t('Schließen'), (e) => { e.stopPropagation(); this.closeTab(tab); }, { size: 13, cls: 'tab-close' }));
     this.tabs.push(tab);
-    this.tabBar.append(tab.el);
+    this.tabList.append(tab.el);
     this.viewsEl.append(view.el);
     doc.addEventListener('modified', () => this.#renderTabs());
     doc.addEventListener('history', () => this.refreshUI());
@@ -172,7 +194,6 @@ export class App {
     this.applyToolMode(tab.view);
     tab.view.el.focus({ preventScroll: true });
     this.refreshUI();
-    document.title = `${tab.doc.name} – PDFwerk`;
   }
 
   #renderTabs() {
@@ -182,6 +203,9 @@ export class App {
       x.el.title = x.doc.name;
     }
     this.tabBar.hidden = this.tabs.length === 0;
+    const title = this.active ? `${this.active.doc.modified ? '● ' : ''}${this.active.doc.name} – PDFwerk` : 'PDFwerk';
+    this.titleEl.textContent = title;
+    document.title = title;
   }
 
   async closeTab(tab) {
@@ -209,11 +233,17 @@ export class App {
       else {
         this.left.setDoc();
         this.startEl.hidden = false;
-        document.title = 'PDFwerk';
       }
     }
     this.#renderTabs();
     this.refreshUI();
+  }
+
+  async closeAll() {
+    for (const tab of [...this.tabs]) {
+      await this.closeTab(tab);
+      if (this.tabs.includes(tab)) return; // cancelled
+    }
   }
 
   async save({ saveAs = false, flatten = false, flattenForms = false, suffix = '' } = {}) {
@@ -239,6 +269,7 @@ export class App {
       doc.name = res.name;
       doc.setModified(false);
       this.#renderTabs();
+      if (res.handle) addRecent(res.name, res.handle);
     }
     toast(res.handle ? t('Gespeichert: {name}', { name: res.name }) : t('Heruntergeladen: {name}', { name: res.name }), { type: 'success' });
     if (!hasFsAccess && !this.prefs.get('downloadHint')) {
@@ -364,7 +395,7 @@ export class App {
 
   // ------------------------------------------------------------------ theme
   applyTheme() {
-    const pref = this.prefs.get('theme', 'system');
+    const pref = this.prefs.get('theme', 'light');
     const dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     this.refreshUI?.();
@@ -537,6 +568,10 @@ export class App {
     if (document.querySelector('.backdrop')) return; // modal dialog handles its own keys
     const target = e.target;
     const combo = comboOf(e);
+    if (this.backstage.isOpen) {
+      if (e.key === 'Escape') { e.preventDefault(); this.backstage.close(); return; }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
+    }
     if (this.#isTyping(target)) {
       if (combo === 'Ctrl+S' || combo === 'Ctrl+Shift+S' || combo === 'Ctrl+O' || combo === 'Ctrl+P') {
         e.preventDefault();

@@ -369,7 +369,7 @@ class BookmarksPanel {
   render() {
     if (!this.doc) { this.tree.replaceChildren(h('div', { class: 'empty', text: t('Kein Dokument geöffnet') })); return; }
     if (!this.doc.outline.length) {
-      this.tree.replaceChildren(h('div', { class: 'empty', text: t('Keine Lesezeichen. Mit Strg+B ein Lesezeichen für die aktuelle Seite anlegen.') }));
+      this.tree.replaceChildren(h('div', { class: 'empty', text: t('Keine Lesezeichen. Mit Strg+Shift+B ein Lesezeichen für die aktuelle Seite anlegen.') }));
       return;
     }
     const build = (items, depth) => items.map((it) => {

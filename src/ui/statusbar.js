@@ -1,14 +1,18 @@
-// Status bar (page navigation, zoom, layout, cursor position) and the find bar.
-import { h, iconButton } from './dom.js';
+// Status bar (options, page size, page navigation, layout, zoom) and the find bar.
+import { h, iconButton, showMenu } from './dom.js';
 import { icon } from './icons.js';
 import { t } from '../i18n.js';
-import { TOOL_HINTS, ZOOM_PRESETS } from './ribbon.js';
+import { TOOL_HINTS } from './ribbon.js';
+import { ZoomCombo, ZoomSlider } from './zoom.js';
 
 export class StatusBar {
   constructor(app, host) {
     this.app = app;
     this.host = host;
     const c = (id) => iconButton(app.commands.get(id).icon, `${t(app.commands.get(id).label)} ${app.commands.shortcut(id) ? `(${app.commands.shortcut(id)})` : ''}`.trim(), () => app.commands.run(id), { size: 16, cls: `sb-${id}` });
+    this.options = h('button', { class: 'sb-options', type: 'button', title: t('Optionen'), onclick: () => this.#optionsMenu() },
+      icon('SlidersHorizontal', 15), h('span', { text: t('Optionen …') }), icon('ChevronDown', 12));
+    this.size = h('div', { class: 'sb-size', title: t('Seitengröße') });
     this.hint = h('div', { class: 'sb-hint' });
     this.coords = h('div', { class: 'sb-coords' });
     this.pageInput = h('input', {
@@ -25,30 +29,32 @@ export class StatusBar {
       onfocus: () => this.pageInput.select(),
     });
     this.pageTotal = h('span', { class: 'sb-total' });
-    this.zoomSel = h('select', {
-      class: 'input sb-zoom', 'aria-label': t('Zoom'),
-      onchange: () => {
-        const v = this.zoomSel.value;
-        if (v === 'width' || v === 'page') app.view?.setFit(v); else app.view?.setZoom(+v);
-        app.view?.el.focus({ preventScroll: true });
-      },
-    });
-    this.navEls = [c('firstPage'), c('prevPage'), this.pageInput, this.pageTotal, c('nextPage'), c('lastPage')];
-    this.zoomEls = [c('zoomOut'), this.zoomSel, c('zoomIn'), c('fitWidth'), c('fitPage')];
-    this.layoutEls = [c('layoutSingle'), c('layoutContinuous'), c('layoutTwo')];
+    this.zoom = new ZoomCombo(app, 'sb-zoom');
+    this.slider = new ZoomSlider(app);
     host.append(
-      this.hint,
-      h('div', { class: 'sb-spacer' }),
+      this.options,
+      this.size,
       this.coords,
-      h('div', { class: 'sb-group' }, ...this.navEls),
-      h('div', { class: 'sb-group' }, ...this.zoomEls),
-      h('div', { class: 'sb-group sb-layout' }, ...this.layoutEls),
+      this.hint,
+      h('div', { class: 'sb-group sb-nav' }, c('firstPage'), c('prevPage'), h('div', { class: 'sb-pagebox' }, this.pageInput, this.pageTotal), c('nextPage'), c('lastPage')),
+      h('div', { class: 'sb-group sb-layout' }, c('layoutSingle'), c('layoutContinuous'), c('layoutTwo')),
+      h('div', { class: 'sb-group sb-zoomgroup' }, this.zoom.el, c('zoomOut'), this.slider.el, c('zoomIn')),
     );
+  }
+
+  #optionsMenu() {
+    const cmds = this.app.commands;
+    const item = (id) => ({ label: t(cmds.get(id).label), icon: cmds.get(id).icon, shortcut: cmds.shortcut(id), checked: cmds.get(id).checked?.(), disabled: !cmds.enabled(id), run: () => cmds.run(id) });
+    showMenu([item('toggleLeft'), item('toggleRight'), '-', item('toggleAnnots'), item('highlightFields'), item('stickyTools'), '-', item('theme'), item('fullscreen'), '-', item('settings')], 0, 0, { anchor: this.options });
   }
 
   focusPageInput() {
     this.pageInput.focus();
     this.pageInput.select();
+  }
+
+  focusZoom() {
+    this.zoom.focus();
   }
 
   setCoords(pt) {
@@ -66,21 +72,25 @@ export class StatusBar {
     if (document.activeElement !== this.pageInput) this.pageInput.value = doc ? String((view?.current ?? 0) + 1) : '';
     this.pageTotal.textContent = doc ? `/ ${doc.numPages}` : '';
     this.pageInput.disabled = !doc;
-    const z = view?.zoom || 1;
-    const opts = [['width', t('Seitenbreite')], ['page', t('Ganze Seite')], ...ZOOM_PRESETS.map((p) => [String(p), `${Math.round(p * 100)} %`])];
-    const custom = !ZOOM_PRESETS.some((p) => Math.abs(p - z) < 0.001);
-    if (custom) opts.push([String(z), `${Math.round(z * 100)} %`]);
-    this.zoomSel.replaceChildren(...opts.map(([v, l]) => h('option', { value: v, text: l })));
-    this.zoomSel.value = view?.fit ? view.fit : custom ? String(z) : String(ZOOM_PRESETS.find((p) => Math.abs(p - z) < 0.001));
-    if (view?.fit) this.zoomSel.querySelector(`option[value="${view.fit}"]`).textContent = `${Math.round(z * 100)} %`;
-    this.zoomSel.disabled = !doc;
+    if (doc && view) {
+      const p = doc.pages[view.current];
+      const [x1, y1, x2, y2] = p.view;
+      const rotated = (p.rotate || 0) % 180 !== 0;
+      const cm = (v) => ((v * 2.54) / 72).toFixed(2);
+      const [w, hgt] = rotated ? [y2 - y1, x2 - x1] : [x2 - x1, y2 - y1];
+      this.size.textContent = `${cm(w)} × ${cm(hgt)} cm`;
+    } else {
+      this.size.textContent = '';
+      this.coords.textContent = '';
+    }
+    this.zoom.refresh();
+    this.slider.refresh();
     for (const b of this.host.querySelectorAll('.icon-btn')) {
       const id = [...b.classList].find((x) => x.startsWith('sb-'))?.slice(3);
       if (!id) continue;
       b.disabled = !app.commands.enabled(id);
       b.classList.toggle('on', !!app.commands.get(id).checked?.());
     }
-    if (!doc) this.coords.textContent = '';
   }
 }
 

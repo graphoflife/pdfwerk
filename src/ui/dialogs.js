@@ -98,7 +98,7 @@ export class Dialogs {
     const app = this.app;
     const author = h('input', { class: 'input', value: app.prefs.get('author', '') });
     const lang = select([['de', 'Deutsch'], ['en', 'English']], getLang());
-    const theme = select([['system', t('System')], ['light', t('Hell')], ['dark', t('Dunkel')]], app.prefs.get('theme', 'system'));
+    const theme = select([['system', t('System')], ['light', t('Hell')], ['dark', t('Dunkel')]], app.prefs.get('theme', 'light'));
     const zoom = select([['width', t('Seitenbreite')], ['page', t('Ganze Seite')], ['100', '100 %']], app.prefs.get('defaultZoom', 'width') || '100');
     const layout = select([['continuous', t('Fortlaufend')], ['single', t('Einzelseite')], ['two', t('Doppelseite')]], app.prefs.get('layout', 'continuous'));
     const sticky = h('input', { type: 'checkbox', checked: app.tools.sticky });
@@ -157,10 +157,11 @@ export class Dialogs {
     row('Enter', 'Polylinie/Polygon abschließen · Kommentar der Auswahl bearbeiten');
     row('Backspace', 'Beim Polygon-Zeichnen: letzten Punkt entfernen');
     const groups = {
-      'Datei': ['open', 'new', 'save', 'saveAs', 'print', 'properties', 'close'],
+      'Datei': ['fileMenu', 'open', 'new', 'save', 'saveAs', 'print', 'properties', 'close', 'settings', 'quickLaunch'],
       'Bearbeiten': ['undo', 'redo', 'copy', 'cut', 'paste', 'delete', 'selectAll', 'bringFront', 'sendBack', 'forward', 'backward', 'editAnnot'],
-      'Ansicht': ['zoomIn', 'zoomOut', 'fitPage', 'actualSize', 'fitWidth', 'rotateViewCw', 'rotateViewCcw', 'layoutSingle', 'layoutContinuous', 'layoutTwo', 'firstPage', 'lastPage', 'prevPage', 'nextPage', 'goToPage', 'find', 'findNext', 'findPrev', 'toggleLeft', 'toggleRight', 'fullscreen'],
-      'Seiten': ['rotatePagesCw', 'rotatePagesCcw', 'deletePages', 'insertFile', 'extractPages', 'addBookmark'],
+      'Ansicht': ['zoomIn', 'zoomOut', 'zoomTo', 'fitPage', 'actualSize', 'fitWidth', 'rotateViewCw', 'rotateViewCcw', 'layoutSingle', 'layoutContinuous', 'layoutTwo', 'firstPage', 'lastPage', 'prevPage', 'nextPage', 'goToPage', 'find', 'findNext', 'findPrev', 'fullscreen'],
+      'Bereiche': ['panelBookmarks', 'panelThumbs', 'panelComments', 'toggleLeft', 'toggleRight', 'showAnnots', 'toggleAnnots'],
+      'Seiten': ['rotatePagesCw', 'rotatePagesCcw', 'deletePages', 'insertFile', 'extractPages', 'cropPages', 'addBookmark', 'scaleSettings'],
     };
     for (const [g, ids] of Object.entries(groups)) {
       sec(g);

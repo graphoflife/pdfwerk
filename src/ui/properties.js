@@ -1,5 +1,6 @@
 // Right sidebar: properties of the selected annotations, or default style of the active tool.
-import { h, colorControl, select, iconButton } from './dom.js';
+// The same style controls also feed the contextual "Format" ribbon tab.
+import { h, colorControl, colorButton, select, iconButton } from './dom.js';
 import { icon } from './icons.js';
 import { t, fmtDate } from '../i18n.js';
 import { TYPES, UNITS } from '../core/model.js';
@@ -47,6 +48,101 @@ function kindOf(a) {
   return a.type;
 }
 
+/**
+ * Labelled controls for style fields: [{ key, label, el }]. `compact` is the ribbon
+ * variant (colour buttons with a popup palette instead of inline swatch rows).
+ */
+export function styleControls(fields, a, apply, { compact = false } = {}) {
+  const out = [];
+  const add = (key, label, el) => out.push({ key, label, el });
+  const color = (value, onChange, opts = {}) => (compact ? colorButton(value, onChange, opts) : colorControl(value, onChange, opts));
+  const isText = a.type === 'freetext' || a.type === 'callout';
+  for (const f of fields) {
+    switch (f) {
+      case 'color':
+        add(f, isText ? t('Rahmenfarbe') : t('Farbe'), color(a.color, (c) => apply('color', (n) => { n.color = c; }), { title: t('Farbe') }));
+        break;
+      case 'fill':
+        add(f, t('Füllung'), color(a.fill, (c) => apply('fill', (n) => { n.fill = c; }), { allowNone: true, title: t('Füllung') }));
+        break;
+      case 'textColor':
+        add(f, t('Textfarbe'), color(a.textColor || [0, 0, 0], (c) => apply('textColor', (n) => { n.textColor = c; }), { title: t('Textfarbe') }));
+        break;
+      case 'opacity': {
+        const out2 = h('span', { class: 'range-val', text: `${Math.round((a.opacity ?? 1) * 100)} %` });
+        const r = h('input', { type: 'range', min: 5, max: 100, value: Math.round((a.opacity ?? 1) * 100) });
+        r.addEventListener('input', () => { out2.textContent = `${r.value} %`; apply('opacity', (n) => { n.opacity = r.value / 100; }); });
+        add(f, t('Deckkraft'), h('div', { class: 'range-row' }, r, out2));
+        break;
+      }
+      case 'width': {
+        const inp = h('input', { type: 'number', class: 'input num', min: 0, max: 50, step: 0.25, value: a.width ?? 1 });
+        inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v >= 0) apply('width', (n) => { n.width = v; }); });
+        add(f, isText ? t('Rahmenstärke (pt)') : t('Linienstärke (pt)'), inp);
+        break;
+      }
+      case 'eraserSize': {
+        const inp = h('input', { type: 'number', class: 'input num', min: 1, max: 60, step: 1, value: a.width ?? 6 });
+        inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) apply('width', (n) => { n.width = v; }); });
+        add(f, t('Radiergröße'), inp);
+        break;
+      }
+      case 'dash': {
+        const opts = DASHES.filter(([v]) => v !== 'cloudy' || ['rect', 'ellipse', 'polygon'].includes(a.type)).map(([v, l]) => [v, t(l)]);
+        const s = select(opts, a.dash || 'solid');
+        s.addEventListener('change', () => apply('dash', (n) => { n.dash = s.value; }));
+        add(f, t('Linienstil'), s);
+        break;
+      }
+      case 'startCap':
+      case 'endCap': {
+        const s = select(LINE_ENDS.map(([v, l]) => [v, t(l)]), a[f] || (f === 'endCap' && a.type === 'callout' ? 'OpenArrow' : 'None'));
+        s.addEventListener('change', () => apply(f, (n) => { n[f] = s.value; }));
+        add(f, f === 'startCap' ? t('Linienanfang') : t('Linienende'), s);
+        break;
+      }
+      case 'font': {
+        const font = a.font || { family: 'Helvetica', size: 12 };
+        const fam = select(FONT_FAMILIES.map((x) => [x, x]), font.family || 'Helvetica');
+        fam.addEventListener('change', () => apply('font', (n) => { n.font = { ...n.font, family: fam.value }; }));
+        const size = h('input', { type: 'number', class: 'input num', min: 4, max: 200, step: 1, value: font.size || 12 });
+        size.addEventListener('input', () => { const v = parseFloat(size.value); if (v >= 2) apply('fontSize', (n) => { n.font = { ...n.font, size: v }; }); });
+        const bold = h('button', { class: `icon-btn toggle ${font.bold ? 'on' : ''}`, type: 'button', title: t('Fett'), onclick: () => apply('bold', (n) => { n.font = { ...n.font, bold: !font.bold }; }) }, icon('Bold', 16));
+        const ital = h('button', { class: `icon-btn toggle ${font.italic ? 'on' : ''}`, type: 'button', title: t('Kursiv'), onclick: () => apply('italic', (n) => { n.font = { ...n.font, italic: !font.italic }; }) }, icon('Italic', 16));
+        add(f, t('Schrift'), h('div', { class: 'font-row' }, fam, size, bold, ital));
+        break;
+      }
+      case 'fontSize': {
+        const size = h('input', { type: 'number', class: 'input num', min: 4, max: 72, step: 1, value: a.font?.size || 9 });
+        size.addEventListener('input', () => { const v = parseFloat(size.value); if (v >= 2) apply('fontSize', (n) => { n.font = { ...n.font, size: v }; }); });
+        add(f, t('Schriftgröße'), size);
+        break;
+      }
+      case 'align': {
+        const row = h('div', { class: 'seg' }, ...[['left', 'AlignLeft'], ['center', 'AlignCenter'], ['right', 'AlignRight']].map(([v, ic]) => h('button', {
+          class: `icon-btn toggle ${(a.align || 'left') === v ? 'on' : ''}`, type: 'button', title: t({ left: 'Links', center: 'Zentriert', right: 'Rechts' }[v]),
+          onclick: () => apply('align', (n) => { n.align = v; }),
+        }, icon(ic, 16))));
+        add(f, t('Ausrichtung'), row);
+        break;
+      }
+      case 'measure': {
+        const m = a.measure || { ratio: 1, unit: 'mm' };
+        const ratio = h('input', { type: 'number', class: 'input num', min: 0.0001, step: 'any', value: m.ratio ?? 1 });
+        ratio.addEventListener('input', () => { const v = parseFloat(ratio.value); if (v > 0) apply('ratio', (n) => { n.measure = { ...n.measure, ratio: v }; }); });
+        const unit = select(Object.keys(UNITS).map((u) => [u, UNITS[u].label]), m.unit || 'mm');
+        unit.addEventListener('change', () => apply('unit', (n) => { n.measure = { ...n.measure, unit: unit.value }; }));
+        add('ratio', t('Maßstab 1 :'), ratio);
+        add('unit', t('Einheit'), unit);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
 export class PropertiesPanel {
   constructor(app, host) {
     this.app = app;
@@ -80,48 +176,66 @@ export class PropertiesPanel {
     }
   }
 
-  /** Re-render unless the user is typing inside the panel. */
-  refresh(force = false) {
-    if (!this.isOpen) return;
-    const ctxKey = this.#contextKey();
-    if (!force && ctxKey === this.ctxKey && this.host.contains(document.activeElement) && document.activeElement.matches('input, textarea, select')) return;
-    this.ctxKey = ctxKey;
-    this.render();
+  /**
+   * What style edits currently apply to: the selected annotations or the active drawing
+   * tool's defaults. Null when neither (navigation tool, nothing selected).
+   */
+  formatTarget() {
+    const app = this.app;
+    const sel = app.view?.selectedAnnots || [];
+    if (sel.length) {
+      const kinds = [...new Set(sel.map(kindOf))];
+      const fields = kinds.map((k) => FIELDS[k] || []).reduce((acc, f) => acc.filter((x) => f.includes(x)));
+      const ids = sel.map((x) => x.id);
+      const apply = (key, fn) => {
+        const now = Date.now();
+        const history = !(this.last.key === `${ids}|${key}` && now - this.last.time < 1200);
+        this.last = { key: `${ids}|${key}`, time: now };
+        app.doc.update(ids, fn, { history, label: 'Eigenschaften ändern' });
+      };
+      return { kind: 'selection', sel, ids, a: sel[0], fields, apply, locked: sel.every((x) => x.locked) };
+    }
+    const toolId = app.tools.activeId;
+    const def = app.tools.defs.get(toolId);
+    if (!app.doc || def.nav) return null;
+    const kind = TOOL_KIND[toolId];
+    const style = app.tools.styleFor(toolId);
+    const apply = (key, fn) => {
+      const draft = structuredClone(app.tools.styleFor(toolId));
+      fn(draft);
+      app.tools.setStyle(toolId, draft);
+    };
+    return { kind: 'tool', toolId, def, a: { ...style, type: kind, measure: style.measure }, fields: FIELDS[kind] || [], apply };
   }
 
-  #contextKey() {
+  /** Changes whenever the format target or its values change. */
+  contextKey() {
     const v = this.app.view;
     const ids = v ? [...v.selection].join(',') : '';
     const sel = v?.selectedAnnots || [];
     return `${this.app.doc?.id}|${ids}|${this.app.tools.activeId}|${sel.map((a) => a.modified).join(',')}`;
   }
 
+  /** Re-render unless the user is typing inside the panel. */
+  refresh(force = false) {
+    if (!this.isOpen) return;
+    const ctxKey = this.contextKey();
+    if (!force && ctxKey === this.ctxKey && this.host.contains(document.activeElement) && document.activeElement.matches('input, textarea, select')) return;
+    this.ctxKey = ctxKey;
+    this.render();
+  }
+
   render() {
-    const app = this.app;
-    const view = app.view;
-    const sel = view?.selectedAnnots || [];
+    const target = this.formatTarget();
     this.body.replaceChildren();
-    if (sel.length) return this.#renderSelection(sel);
-    const toolId = app.tools.activeId;
-    const def = app.tools.defs.get(toolId);
-    if (!def.nav) return this.#renderTool(toolId, def);
+    if (target?.kind === 'selection') return this.#renderSelection(target);
+    if (target?.kind === 'tool') return this.#renderTool(target);
     return this.#renderDoc();
   }
 
-  #renderSelection(sel) {
+  #renderSelection({ sel, ids, a, fields, apply, locked }) {
     const app = this.app;
-    const kinds = [...new Set(sel.map(kindOf))];
-    const fields = kinds.map((k) => FIELDS[k] || []).reduce((acc, f) => acc.filter((x) => f.includes(x)));
-    const a = sel[0];
     this.titleEl.textContent = sel.length === 1 ? t(TYPES[a.type]?.label || a.type) : t('{n} Anmerkungen', { n: sel.length });
-    const locked = sel.every((x) => x.locked);
-    const ids = sel.map((x) => x.id);
-    const apply = (key, fn) => {
-      const now = Date.now();
-      const history = !(this.last.key === `${ids}|${key}` && now - this.last.time < 1200);
-      this.last = { key: `${ids}|${key}`, time: now };
-      app.doc.update(ids, fn, { history, label: 'Eigenschaften ändern' });
-    };
     if (!locked) this.#fields(fields, a, apply);
     const sec = this.#section(t('Kommentar'));
     const authorIn = h('input', { class: 'input', value: a.author || '', disabled: locked, onchange: () => apply('author', (n) => { n.author = authorIn.value; }) });
@@ -143,18 +257,11 @@ export class PropertiesPanel {
     this.body.append(actions);
   }
 
-  #renderTool(toolId, def) {
+  #renderTool({ toolId, def, a, fields, apply }) {
     const app = this.app;
     this.titleEl.textContent = t(def.label);
-    const kind = TOOL_KIND[toolId];
-    const style = app.tools.styleFor(toolId);
-    const fields = FIELDS[kind] || [];
     this.body.append(h('p', { class: 'hint', text: t('Standardeinstellungen für neue Anmerkungen dieses Werkzeugs.') }));
-    this.#fields(fields, { ...style, type: kind, measure: style.measure }, (key, fn) => {
-      const draft = structuredClone(style);
-      fn(draft);
-      app.tools.setStyle(toolId, draft);
-    });
+    this.#fields(fields, a, apply);
     if (toolId === 'stamp' || toolId === 'image' || toolId === 'signature') {
       this.body.append(h('button', { class: 'btn', type: 'button', onclick: () => app.tools.requestPayload(app.tools.active) }, icon(def.icon, 15), t('Auswählen …')));
     }
@@ -204,88 +311,7 @@ export class PropertiesPanel {
 
   #fields(fields, a, apply) {
     const sec = this.#section(t('Darstellung'));
-    for (const f of fields) {
-      switch (f) {
-        case 'color':
-          sec.append(this.#row(a.type === 'freetext' || a.type === 'callout' ? t('Rahmenfarbe') : t('Farbe'), colorControl(a.color, (c) => apply('color', (n) => { n.color = c; }))));
-          break;
-        case 'fill':
-          sec.append(this.#row(t('Füllung'), colorControl(a.fill, (c) => apply('fill', (n) => { n.fill = c; }), { allowNone: true })));
-          break;
-        case 'textColor':
-          sec.append(this.#row(t('Textfarbe'), colorControl(a.textColor || [0, 0, 0], (c) => apply('textColor', (n) => { n.textColor = c; }))));
-          break;
-        case 'opacity': {
-          const out = h('span', { class: 'range-val', text: `${Math.round((a.opacity ?? 1) * 100)} %` });
-          const r = h('input', { type: 'range', min: 5, max: 100, value: Math.round((a.opacity ?? 1) * 100) });
-          r.addEventListener('input', () => { out.textContent = `${r.value} %`; apply('opacity', (n) => { n.opacity = r.value / 100; }); });
-          sec.append(this.#row(t('Deckkraft'), h('div', { class: 'range-row' }, r, out)));
-          break;
-        }
-        case 'width': {
-          const inp = h('input', { type: 'number', class: 'input num', min: 0, max: 50, step: 0.25, value: a.width ?? 1 });
-          inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v >= 0) apply('width', (n) => { n.width = v; }); });
-          sec.append(this.#row(a.type === 'freetext' || a.type === 'callout' ? t('Rahmenstärke (pt)') : t('Linienstärke (pt)'), inp));
-          break;
-        }
-        case 'eraserSize': {
-          const inp = h('input', { type: 'number', class: 'input num', min: 1, max: 60, step: 1, value: a.width ?? 6 });
-          inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) apply('width', (n) => { n.width = v; }); });
-          sec.append(this.#row(t('Radiergröße'), inp));
-          break;
-        }
-        case 'dash': {
-          const opts = DASHES.filter(([v]) => v !== 'cloudy' || ['rect', 'ellipse', 'polygon'].includes(a.type)).map(([v, l]) => [v, t(l)]);
-          const s = select(opts, a.dash || 'solid');
-          s.addEventListener('change', () => apply('dash', (n) => { n.dash = s.value; }));
-          sec.append(this.#row(t('Linienstil'), s));
-          break;
-        }
-        case 'startCap':
-        case 'endCap': {
-          const s = select(LINE_ENDS.map(([v, l]) => [v, t(l)]), a[f] || (f === 'endCap' && a.type === 'callout' ? 'OpenArrow' : 'None'));
-          s.addEventListener('change', () => apply(f, (n) => { n[f] = s.value; }));
-          sec.append(this.#row(f === 'startCap' ? t('Linienanfang') : t('Linienende'), s));
-          break;
-        }
-        case 'font': {
-          const font = a.font || { family: 'Helvetica', size: 12 };
-          const fam = select(FONT_FAMILIES.map((x) => [x, x]), font.family || 'Helvetica');
-          fam.addEventListener('change', () => apply('font', (n) => { n.font = { ...n.font, family: fam.value }; }));
-          const size = h('input', { type: 'number', class: 'input num', min: 4, max: 200, step: 1, value: font.size || 12 });
-          size.addEventListener('input', () => { const v = parseFloat(size.value); if (v >= 2) apply('fontSize', (n) => { n.font = { ...n.font, size: v }; }); });
-          const bold = h('button', { class: `icon-btn toggle ${font.bold ? 'on' : ''}`, type: 'button', title: t('Fett'), onclick: () => apply('bold', (n) => { n.font = { ...n.font, bold: !font.bold }; }) }, icon('Bold', 16));
-          const ital = h('button', { class: `icon-btn toggle ${font.italic ? 'on' : ''}`, type: 'button', title: t('Kursiv'), onclick: () => apply('italic', (n) => { n.font = { ...n.font, italic: !font.italic }; }) }, icon('Italic', 16));
-          sec.append(this.#row(t('Schrift'), h('div', { class: 'font-row' }, fam, size, bold, ital)));
-          break;
-        }
-        case 'fontSize': {
-          const size = h('input', { type: 'number', class: 'input num', min: 4, max: 72, step: 1, value: a.font?.size || 9 });
-          size.addEventListener('input', () => { const v = parseFloat(size.value); if (v >= 2) apply('fontSize', (n) => { n.font = { ...n.font, size: v }; }); });
-          sec.append(this.#row(t('Schriftgröße'), size));
-          break;
-        }
-        case 'align': {
-          const row = h('div', { class: 'seg' }, ...[['left', 'AlignLeft'], ['center', 'AlignCenter'], ['right', 'AlignRight']].map(([v, ic]) => h('button', {
-            class: `icon-btn toggle ${(a.align || 'left') === v ? 'on' : ''}`, type: 'button', title: t({ left: 'Links', center: 'Zentriert', right: 'Rechts' }[v]),
-            onclick: () => apply('align', (n) => { n.align = v; }),
-          }, icon(ic, 16))));
-          sec.append(this.#row(t('Ausrichtung'), row));
-          break;
-        }
-        case 'measure': {
-          const m = a.measure || { ratio: 1, unit: 'mm' };
-          const ratio = h('input', { type: 'number', class: 'input num', min: 0.0001, step: 'any', value: m.ratio ?? 1 });
-          ratio.addEventListener('input', () => { const v = parseFloat(ratio.value); if (v > 0) apply('ratio', (n) => { n.measure = { ...n.measure, ratio: v }; }); });
-          const unit = select(Object.keys(UNITS).map((u) => [u, UNITS[u].label]), m.unit || 'mm');
-          unit.addEventListener('change', () => apply('unit', (n) => { n.measure = { ...n.measure, unit: unit.value }; }));
-          sec.append(this.#row(t('Maßstab 1 :'), ratio), this.#row(t('Einheit'), unit));
-          break;
-        }
-        default:
-          break;
-      }
-    }
+    for (const c of styleControls(fields, a, apply)) sec.append(this.#row(c.label, c.el));
     if (sec.children.length > 1) this.body.append(sec);
   }
 }
